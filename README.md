@@ -218,5 +218,3 @@ Possible next steps for the project include:
 ## Repository Notes
 
 The main project logic is in [financial_pipeline.py](financial_pipeline.py). The companion [analysis_agent.py](analysis_agent.py) is a separate prototype focused on AI-assisted financial analysis and report generation.
-
-This project is well suited as a portfolio piece because it demonstrates end-to-end data work: ingesting raw files, transforming messy data, calculating meaningful business metrics, storing results, and producing reporting outputs.
