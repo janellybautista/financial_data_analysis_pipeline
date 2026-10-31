@@ -1,290 +1,222 @@
 # Financial Data Analysis Pipeline
 
-A Python pipeline that extracts financial metrics from **PDF, Excel, and CSV financial files**, cleans and stores the data in **SQLite**, calculates financial KPIs with **pandas and SQL**, and exports **Power BI-ready reports and charts**.
+A Python project that ingests financial data from CSV, Excel, and PDF files, cleans and normalizes the records, calculates business KPIs, stores the results in SQLite, and exports reporting-ready outputs for analysis.
 
----
+## Project Overview
 
-## 1. Project Overview
+This project turns messy financial statements into a consistent analytical dataset. The workflow is designed for real-world finance data where source files vary by format, company, and reporting period. Instead of manually reviewing each document, the pipeline automates extraction, validation, enrichment, and reporting.
 
-This project takes messy financial files from an input folder and turns them into a clean dataset for analysis.
-
-```text
-PDF / Excel / CSV files
-        ↓
-Python extraction and cleaning
-        ↓
-SQLite database
-        ↓
-KPI calculations with pandas and SQL
-        ↓
-CSV outputs and charts
-        ↓
-Power BI dashboard
-```
-
-The pipeline:
-
-1. Reads PDF, Excel, or CSV financial files
-2. Extracts key financial values
-3. Organizes the data into a structured table
-4. Stores the cleaned data in a SQLite database
-5. Calculates financial KPIs using pandas and SQL
-6. Exports CSV files for Power BI
-7. Creates basic charts for quick checking
-
----
-
-## 2. Input Files and Formatting
-
-### 2.1 Supported Input Files
-
-Place all files inside the `input_files/` folder.
-
-| File Type | Extension | How the Pipeline Reads It |
-|---|---|---|
-| PDF | `.pdf` | Extracts text and searches for financial labels |
-| Excel | `.xlsx`, `.xls` | Reads all sheets in the workbook and searches for financial labels |
-| CSV | `.csv` | Reads structured columns directly |
-
-Note: For best results, each PDF or Excel file should represent one company/entity and one reporting period. Excel workbooks can contain multiple sheets, but those sheets should belong to the same company and period. If one workbook contains different companies or periods across sheets, the parser may need additional logic to separate them correctly.
-
----
-
-### 2.2 File Naming Format
-
-Use this format when possible:
+## Clear Architecture Diagram
 
 ```text
-company_year_month.filetype
+Raw source files (.csv, .xlsx, .xls, .pdf)
+                │
+                ▼
+        File discovery + metadata extraction
+                │
+                │  Example: company, year, month, period
+                ▼
+    Extract values from tables or text using pandas + regex
+                │
+                ▼
+       Standardize column names and data types
+                │
+                ▼
+      Validate financial values and prevent invalid math
+                │
+                ▼
+      Clean dataset with normalized KPI-ready schema
+                │
+                ▼
+               SQLite database
+                │
+                ├── Store raw/cleaned records
+                └── Query summary metrics and rankings
+                │
+                ▼
+      Compute KPIs (profit margin, liquidity, etc.)
+                │
+                ▼
+      Export CSV summaries + charts for business review
+                │
+                ▼
+       Final analysis outputs for Power BI / reporting
 ```
 
-Examples:
+## How the Pipeline Works
+
+### 1. Ingest raw files
+The project scans the input folder for files in multiple formats:
+
+- CSV
+- Excel
+- PDF
+
+Each file is processed and assigned metadata based on its filename, such as:
+
+- company name
+- report year
+- report month
+- reporting period
+- source file name
+- source type
+
+This metadata extraction is handled in the filename parsing logic in [financial_pipeline.py](financial_pipeline.py).
+
+### 2. Extract financial values
+The code reads each file and extracts the key fields it needs from the data, including:
+
+- service revenue
+- sales revenue
+- net income
+- operating expenses
+- total assets
+- current assets
+- liabilities
+- retained earnings
+
+For PDFs, text is extracted with `pdfplumber`. For Excel files, all sheets are read with pandas. For CSVs, the structured table is parsed directly.
+
+### 3. Clean and normalize the data
+After extraction, the pipeline standardizes the schema and ensures all rows are aligned to the same columns. This includes:
+
+- lowercasing and normalizing column names
+- converting currency strings to numeric values
+- filling missing columns with nulls where needed
+- ensuring metadata is consistent across files
+
+This step is important because the source files are not guaranteed to use the same formatting or naming conventions.
+
+### 4. Calculate KPIs
+Once the rows are standardized, the project computes several financial KPIs:
+
+- Total revenue = service revenue + sales revenue
+- Profit margin = net income / total revenue
+- Operating expense ratio = operating expenses / total revenue
+- Current ratio = current assets / liabilities
+- Asset-to-liability ratio = total assets / liabilities
+
+These KPIs are then attached to each record and used for comparisons by company, period, and source.
+
+### 5. Save to the database
+The cleaned dataset is written to a SQLite database. This provides a durable storage layer and allows the project to run analytical SQL queries without reprocessing the original files.
+
+### 6. Export reporting outputs
+The project writes multiple CSV outputs and chart files to the output directory, including:
+
+- financial_data_with_kpis.csv
+- all_records.csv
+- sql_calculated_kpis.csv
+- highest_profit_margin.csv
+- strongest_liquidity.csv
+- largest_total_assets.csv
+- revenue_by_company.csv
+- revenue_by_period.csv
+- average_profit_margin_by_company.csv
+
+These outputs are useful for dashboards, BI tools, and stakeholder review.
+
+## Data Validation
+
+The project includes practical quality checks to prevent bad or misleading numbers from being loaded into the analysis layer. In the current implementation, the pipeline validates and normalizes data in several ways:
+
+- money values are cleaned before conversion, removing formatting such as `$` and `,`
+- invalid numbers are coerced to nulls instead of crashing the pipeline
+- division-based KPI calculations only run when the denominator is present and non-zero
+- metadata is filled from the filename when row-level data is missing
+- source information is preserved so analysts can trace each record back to the original file
+
+Examples of the validation logic in practice:
+
+- `pd.to_numeric(..., errors="coerce")` prevents malformed values from breaking numeric analysis
+- `NULLIF` logic in SQL avoids divide-by-zero errors when liabilities or revenue are zero
+- Only records with valid KPI inputs are used in ratio calculations
+
+This means the pipeline is designed to ensure that no malformed financial values are silently treated as valid numbers, and that no invalid KPI is calculated from a zero-value denominator.
+
+## Storage Choice
+
+The project uses SQLite as the local analytical data store.
+
+### Why SQLite was a good choice here
+
+- lightweight and easy to set up for a local analysis project
+- portable and file-based, no separate server required
+- sufficient for a moderate-sized financial dataset
+- easy to query with SQL for summary analysis and rankings
+- simple to export to CSV for downstream tools such as Power BI
+
+This is a good fit for a project whose goal is to process a batch of company statements and generate reporting outputs without requiring a production-grade warehouse. For a much larger historical time-series workload, a columnar engine like DuckDB could be even faster for analytical queries, especially for large-scale aggregations and exploratory analysis.
+
+In short:
+
+- SQLite: ideal for a self-contained analytics pipeline and local reporting workflow
+- DuckDB: better for very large analytical workloads and heavier query performance
+
+## Project Structure
 
 ```text
-company_a_2024_01.csv
-company_b_2024_02.xlsx
-company_c_april_2024.pdf
+financial_data_analysis_pipeline/
+├── financial_pipeline.py        # main data pipeline
+├── analysis_agent.py            # separate AI/finance prototype
+├── pyproject.toml              # project configuration
+├── README.md                   # project overview and workflow explanation
+├── input_files/                # raw financial source files
+├── output/                     # generated CSV reports, charts, and database
+├── LICENSE
+└── .gitignore
 ```
 
-The pipeline uses file names to identify company, year, month, period, source file, and source type.
+## KPI Definitions
 
-Example:
+The project calculates and compares business health using these key financial metrics:
 
-```text
-company_a_2024_01.csv
+- Total revenue = service revenue + sales revenue
+- Profit margin = net income / total revenue
+- Operating expense ratio = operating expenses / total revenue
+- Current ratio = current assets / liabilities
+- Asset-to-liability ratio = total assets / liabilities
+
+## Outputs and Business Use
+
+The generated files allow analysts to answer business questions such as:
+
+- Which company has the highest total revenue?
+- Which company has the strongest operating margin?
+- Which period had the strongest revenue growth?
+- Which company appears to have the best liquidity position?
+
+The project is useful for financial reporting, portfolio analysis, and data engineering demonstrations because it combines data ingestion, metric creation, database storage, and output generation in a single workflow.
+
+## Setup
+
+Using Poetry:
+
+```bash
+poetry install
+poetry run python financial_pipeline.py
 ```
 
-is read as:
-
-| Field | Value |
-|---|---|
-| company | `company_a` |
-| year | `2024` |
-| month | `01` |
-| period | `2024-01` |
-| source_type | `csv` |
-
----
-
-### 2.3 CSV Input Format
-
-CSV files should already be organized in columns.
-
-Recommended columns:
-
-```text
-company,year,month,service_revenue,sales_revenue,net_income,operating_expenses,total_assets,current_assets,liabilities,retained_earnings
-```
-
-Example:
-
-```csv
-company,year,month,service_revenue,sales_revenue,net_income,operating_expenses,total_assets,current_assets,liabilities,retained_earnings
-company_a,2024,01,500000,300000,120000,450000,900000,300000,200000,150000
-company_b,2024,01,400000,300000,80000,500000,750000,250000,180000,100000
-company_c,2024,01,600000,200000,150000,420000,1000000,350000,220000,180000
-```
-
-The pipeline uses file names to identify company, year, month, period, and source type for PDF, Excel, and CSV files. If a CSV already includes these columns, the file values are used; otherwise, missing metadata is filled from the file name.
-
----
-
-### 2.4 PDF and Excel Input Format
-
-PDF and Excel files should include recognizable financial labels, such as:
-
-```text
-Service revenue
-Sales revenue
-Net income
-Total operating expenses
-Total assets
-Total current assets
-Total current liabilities
-Retained earnings
-```
-
-The parser searches for these labels and extracts the matching values.
-
-Note: The parser currently uses regex patterns for common financial labels. If a PDF or Excel file uses different wording, abbreviations, or unusual formatting, the patterns in `financial_pipeline.py` may need to be updated.
-
----
-
-## 3. Setup, Run, and Outputs
-
-### 3.1 Setup Instructions
-
-Install the required packages:
+Using pip:
 
 ```bash
 pip install pandas matplotlib pdfplumber openpyxl
-```
-
-If `pip` does not work, try:
-
-```bash
-python3 -m pip install pandas matplotlib pdfplumber openpyxl
-```
-
----
-
-### 3.2 How to Run
-
-1. Add your files to the `input_files/` folder.
-
-Example:
-
-```text
-input_files/
-├── company_a_2024_01.csv
-├── company_b_2024_01.xlsx
-└── company_c_2024_01.pdf
-```
-
-2. Run the pipeline:
-
-```bash
-python3 financial_pipeline.py
-```
-
-If your computer uses `python` instead of `python3`, run:
-
-```bash
 python financial_pipeline.py
 ```
 
----
+## Future Improvements
 
-### 3.3 Output Files
+Possible next steps for the project include:
 
-The pipeline creates an `output/` folder.
+- improving regex extraction for more document variations
+- adding stronger validation rules for malformed or incomplete records
+- expanding support for scanned PDFs and OCR workflows
+- creating automated tests for KPI accuracy and data quality
+- adding a Streamlit dashboard for interactive exploration
+- connecting outputs to Power BI or a warehouse environment
 
-Main outputs:
+## Repository Notes
 
-```text
-output/
-├── financial_data_with_kpis.csv
-├── financial_analysis.db
-├── all_records.csv
-├── sql_calculated_kpis.csv
-├── highest_profit_margin.csv
-├── strongest_liquidity.csv
-├── largest_total_assets.csv
-├── revenue_by_company.csv
-├── revenue_by_period.csv
-├── average_profit_margin_by_company.csv
-├── total_revenue_by_company.png
-├── profit_margin_by_company.png
-└── total_revenue_by_period.png
-```
+The main project logic is in [financial_pipeline.py](financial_pipeline.py). The companion [analysis_agent.py](analysis_agent.py) is a separate prototype focused on AI-assisted financial analysis and report generation.
 
----
-
-## 4. Analytics and Reporting
-
-### 4.1 KPIs Calculated
-
-The pipeline calculates the following financial KPIs:
-
-| KPI | Formula |
-|---|---|
-| Total revenue | `service_revenue + sales_revenue` |
-| Profit margin | `net_income / total_revenue` |
-| Operating expense ratio | `operating_expenses / total_revenue` |
-| Current ratio | `current_assets / liabilities` |
-| Asset-to-liability ratio | `total_assets / liabilities` |
-
----
-
-### 4.2 SQL Analysis
-
-After the financial data is extracted and cleaned with Python/pandas, the pipeline saves the structured dataset into a SQLite database:
-
-```text
-output/financial_analysis.db
-```
-
-The SQLite table includes the cleaned financial records and the main KPI columns calculated with pandas, such as:
-
-```text
-total_revenue
-profit_margin
-operating_expense_ratio
-current_ratio
-asset_to_liability_ratio
-```
-
-Once the data is stored in SQLite, the script automatically runs SQL queries to retrieve, filter, rank, compare, and create database-based analysis outputs.
-
-SQL query outputs are exported as CSV files, including:
-
-```text
-all_records.csv
-sql_calculated_kpis.csv
-highest_profit_margin.csv
-strongest_liquidity.csv
-largest_total_assets.csv
-revenue_by_company.csv
-revenue_by_period.csv
-average_profit_margin_by_company.csv
-```
-
-The `sql_calculated_kpis` query also calculates KPI values directly from the raw financial columns in SQLite. This helps check the pandas-calculated KPI results and shows how the same metrics can be calculated directly with SQL.
-
----
-
-### 4.3 Power BI Reporting
-
-The main file to import into Power BI is:
-
-```text
-output/financial_data_with_kpis.csv
-```
-
-This file can be used to create dashboard visuals.
-
-Suggested dashboard elements:
-
-| Dashboard Element | Fields |
-|---|---|
-| KPI cards | `total_revenue`, `net_income`, `profit_margin`, `current_ratio` |
-| Revenue chart | `company`, `total_revenue` |
-| Profitability chart | `company`, `profit_margin` |
-| Time trend | `period`, `total_revenue` |
-| Slicers | `company`, `year`, `month`, `source_type` |
-
----
-### 5. Current Status & Future Improvements
-
-The main pipeline code is included and runs with compatible financial PDF, CSV, or Excel inputs. Example input files and sample output reports are not included yet, but will be added as demo materials.
-
-The repository also includes a complementary LLM API-based prototype for summarizing extracted financial data and generating plain-language explanations.
-
-Possible future upgrades:
-
-- Add more flexible financial label matching with document parsing tools such as LlamaParse
-- Add support for scanned PDFs or OCR
-- Add AI-generated summaries from already-computed KPI results to the main pipeline code
-- Add a Streamlit app for uploading files...
-
----
+This project is well suited as a portfolio piece because it demonstrates end-to-end data work: ingesting raw files, transforming messy data, calculating meaningful business metrics, storing results, and producing reporting outputs.
